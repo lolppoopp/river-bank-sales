@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f5c5a"><meta name="apple-mobile-web-app-capable" content="yes"><title>SmartHire</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#eceee9;--ink:#101c26;--mut:#5d6b73;--pri:#0f5c5a;--acc:#f2b705;--bd:#cfd4cc;--ok:#1f7a4d;--bad:#a63d2f;--in:#f8f9f6}
+@media (prefers-color-scheme:dark){:root{--bg:#0f171b;--ink:#e6ecea;--mut:#8fa0a6;--pri:#5fc4bd;--bd:#25343a;--ok:#5fd394;--bad:#f08a7a;--in:#16222a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans Arabic",Tahoma,Arial,sans-serif;line-height:1.75;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+.w{max-width:720px;margin:0 auto;padding:0 18px 40px}
+.top{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:2px solid var(--ink)}
+.logo{font-weight:700;font-size:20px}.logo span{background:var(--acc);color:#101c26;padding:0 6px}
+nav{display:flex;gap:20px;border-bottom:1px solid var(--bd);overflow-x:auto}
+nav button{background:none;border:0;border-bottom:3px solid transparent;padding:12px 0;color:var(--mut);font:inherit;font-weight:500;cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--ink);border-bottom-color:var(--acc)}
+h1{font-size:26px;margin:22px 0 6px}h2{font-size:18px;margin:22px 0 6px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid var(--bd);border-radius:4px;background:var(--in);color:var(--ink);font:inherit;margin-bottom:8px}
+textarea{min-height:80px}
+:focus-visible{outline:3px solid var(--acc)}
+.btn{background:var(--ink);color:var(--bg);border:0;border-radius:4px;padding:10px 16px;font:inherit;font-weight:500;cursor:pointer}
+.btn.g{background:none;color:var(--ink);border:1px solid var(--ink)}.btn.s{padding:5px 12px;font-size:14px}.btn:disabled{opacity:.5}
+.tag{display:inline-block;border:1px solid var(--bd);border-radius:3px;padding:0 8px;margin:2px 0 2px 4px;font-size:14px}
+.tag.y{border-color:var(--pri);color:var(--pri)}.tag.n{border-style:dashed;color:var(--bad);border-color:var(--bad)}
+label.tag{cursor:pointer}label.tag input{width:auto;margin:0 0 0 6px}
+.it{padding:14px 0;border-bottom:1px solid var(--bd)}.nm{font-weight:700}.m{color:var(--mut);font-size:14px}
+.f{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}.f>input,.f>select{flex:1;min-width:110px;margin:0}
+.em{padding:14px 0;color:var(--mut)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+#toast{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 18px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+.note{border-inline-start:4px solid var(--acc);padding:8px 12px;margin:14px 0;font-size:15px}
+.lnk{background:none;border:0;color:var(--pri);text-decoration:underline;cursor:pointer;font:inherit;padding:0}
+</style>
+</head>
+<body>
+<div class="w" id="app"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+/* ===== الإعداد: الصق بيانات مشروعك من Supabase > Project Settings > API ===== */
+var SUPABASE_URL='https://nxoeeuzmjnzkftfpvssu.supabase.co', SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54b2VldXptam56a2Z0ZnB2c3N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE4NDI3MDIsImV4cCI6MjEwNzQxODcwMn0.H6R2VKV1l53bHV_qyublLAWmEQ1sOXcPN1NTwPGJw90';
+
+var $=function(i){return document.getElementById(i)};
+var esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+var SLOT={morning:'صباحًا',noon:'ظهرًا',evening:'مساءً'},ROLE={seeker:'باحث عن عمل',employer:'صاحب عمل',tradesperson:'فني',customer:'عميل'};
+var TABS={seeker:[['jobs','الوظائف'],['sk','مهاراتي'],['ap','طلباتي']],employer:[['mj','وظائفي'],['nj','وظيفة جديدة']],tradesperson:[['tp','ملفي الفني'],['tb','حجوزاتي']],customer:[['tl','فنيين'],['cb','حجوزاتي']],admin:[['ad','الإدارة']]};
+var VIEWS={},sb,P=null,SKL=[],CAT=[],tt;
+function toast(m){var t=$('toast');t.textContent=m;t.className='on';clearTimeout(tt);tt=setTimeout(function(){t.className=''},2600)}
+function em(m){return '<div class="em">'+m+'</div>'}
+var ERR={'Invalid login credentials':'البريد أو كلمة المرور غير صحيحة','User already registered':'البريد ده مسجّل قبل كده','Email not confirmed':'لازم تأكد بريدك الأول'};
+function msg(e){var m=(e&&e.message)||String(e);for(var k in ERR)if(m.indexOf(k)>-1)return ERR[k];if(/Password should be/i.test(m))return 'كلمة المرور لازم تكون 6 أحرف على الأقل';if(/past/i.test(m))return 'اختر تاريخ من النهارده أو بعده';if(e&&e.code==='42501')return 'مش مسموح لك بالعملية دي';if(/fetch|network/i.test(m))return 'مشكلة في الاتصال بالإنترنت';return m}
+function ok(r){if(r.error){toast(msg(r.error));return false}return true}
+var busy=false;ERR["rate limit"]="عدد الرسائل زاد. استنى دقيقة وجرّب تاني";ERR["should be different"]="كلمة المرور الجديدة لازم تختلف عن القديمة";ERR["session missing"]="سجّل دخول من جديد";ERR["expired"]="الرابط انتهت صلاحيته";
+async function once(fn){if(busy)return;busy=true;try{await fn()}catch(e){toast(msg(e))}finally{busy=false}}
+function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function main(h){$('main').innerHTML=h}
+
+var HOME=location.origin+location.pathname,PENDING='',RECOVERY=false,BOOTING=false;
+var EMAIL_RE=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+var SHOWPW='<label class="m"><input type="checkbox" id="sp" style="width:auto;margin:0 0 0 6px">إظهار كلمة المرور</label>';
+function pwOK(p){return p.length>=8&&/[A-Za-z\u0600-\u06FF]/.test(p)&&/\d/.test(p)}
+function hint(p){if(!p)return '';if(!pwOK(p))return '<span class="bad">ضعيفة: 8 أحرف على الأقل وفيها حروف وأرقام</span>';return '<span class="ok">'+(p.length>=12||/[^A-Za-z0-9\u0600-\u06FF]/.test(p)?'قوية':'مقبولة')+'</span>'}
+function bindShow(){var c=$('sp');if(c)c.onchange=function(){var t=this.checked?'text':'password';['pw','pw2','np','np2','cp','ac'].forEach(function(i){if($(i))$(i).type=t})}}
+var LOGO='<div class="top"><div class="logo">Smart<span>Hire</span></div></div>';
+
+if(SUPABASE_URL.indexOf('PASTE')===0){$('app').innerHTML='<h1>خطوة أخيرة</h1><p>افتح الملف وعدّل أول سطر في الكود: ضع Project URL وanon key من Supabase (Project Settings ثم API).</p>'}
+else{
+sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+sb.auth.onAuthStateChange(function(e){
+ if(e==='PASSWORD_RECOVERY'){RECOVERY=true;if(!$('np'))recoveryUI();return}
+ if(e==='SIGNED_OUT'&&P){P=null;authUI();return}
+ if(e==='SIGNED_IN'&&!P&&!RECOVERY)setTimeout(function(){if(!P&&!BOOTING)boot().catch(function(){})},50)});
+start()}
+
+function start(){
+var h=new URLSearchParams(location.hash.replace(/^#/,'')),ty=h.get('type'),er=h.get('error_description');
+if(er){history.replaceState(null,'',HOME);authUI('in','<b>الرابط مش صالح:</b> انتهت صلاحيته أو اتستخدم قبل كده. سجّل دخول وهنعرض لك إعادة إرسال التأكيد، أو اضغط "نسيت كلمة المرور؟".');return}
+if(ty==='recovery'){RECOVERY=true;sb.auth.getSession().then(function(){if(!$('np'))recoveryUI()});return}
+boot().then(function(){if(ty==='signup')toast('تم تأكيد بريدك. أهلًا بيك!');if(ty==='email_change')toast('تم تأكيد البريد الجديد')}).catch(function(e){toast(msg(e));authUI()})}
+
+async function boot(){
+if(BOOTING)return;BOOTING=true;
+try{
+var s=await sb.auth.getSession();
+if(!s.data.session)return authUI();
+var p=await sb.from('profiles').select('*').eq('id',s.data.session.user.id).single();
+if(p.error){await new Promise(function(r){setTimeout(r,800)});p=await sb.from('profiles').select('*').eq('id',s.data.session.user.id).single();if(p.error){toast(msg(p.error));return authUI()}}
+P=p.data;
+SKL=(await sb.from('skills').select('*').order('id')).data||[];
+CAT=(await sb.from('service_categories').select('*')).data||[];
+shell()}finally{BOOTING=false}}
+
+function authUI(mode,note){
+mode=mode||'in';
+var T={in:'أهلًا بيك',up:'حساب جديد',forgot:'نسيت كلمة المرور'};
+var h=LOGO+'<h1>'+T[mode]+'</h1>'+(mode==='in'?'<p class="m">سجّل دخولك للمتابعة.</p>':'')+(note?'<div class="note">'+note+'</div>':'')+
+'<input id="em" type="email" inputmode="email" placeholder="البريد الإلكتروني" autocomplete="email" autocapitalize="off" value="'+esc(PENDING)+'">';
+if(mode==='forgot')h+='<p class="m">اكتب بريدك وهنبعتلك رابط لاختيار كلمة مرور جديدة.</p>';
+else h+='<input id="pw" type="password" placeholder="كلمة المرور" autocomplete="'+(mode==='in'?'current-password':'new-password')+'">';
+if(mode==='up')h+='<div id="ph" class="m" style="min-height:24px"></div><input id="pw2" type="password" placeholder="أعد كتابة كلمة المرور" autocomplete="new-password"><input id="nm" placeholder="اسمك" autocomplete="name"><select id="ro" aria-label="نوع الحساب"><option value="seeker">باحث عن عمل</option><option value="employer">صاحب عمل</option><option value="tradesperson">فني (سباك، كهربائي...)</option><option value="customer">عميل يبحث عن فني</option></select>';
+if(mode!=='forgot')h+=SHOWPW;
+h+='<div class="f"><button class="btn" id="pri">'+{in:'دخول',up:'إنشاء الحساب',forgot:'أرسل الرابط'}[mode]+'</button><button class="btn g" id="alt">'+(mode==='in'?'حساب جديد':'رجوع')+'</button></div>';
+if(mode==='in')h+='<p><button class="lnk" id="fg">نسيت كلمة المرور؟</button></p>';
+$('app').innerHTML=h;bindShow();
+var keep=function(){PENDING=$('em').value.trim().toLowerCase()};
+if(mode==='up')$('pw').oninput=function(){$('ph').innerHTML=hint(this.value)};
+document.querySelectorAll('#app input').forEach(function(i){i.onkeydown=function(e){if(e.key==='Enter')$('pri').click()}});
+$('alt').onclick=function(){keep();authUI(mode==='in'?'up':'in')};
+if($('fg'))$('fg').onclick=function(){keep();authUI('forgot')};
+$('pri').onclick=function(){once(function(){return authGo(mode)})}}
+
+async function authGo(mode){
+var e=$('em').value.trim().toLowerCase();PENDING=e;
+if(!EMAIL_RE.test(e)){toast('اكتب بريد إلكتروني صحيح');return}
+if(mode==='forgot'){var f=await sb.auth.resetPasswordForEmail(e,{redirectTo:HOME});if(ok(f))authUI('in','لو البريد ده مسجّل عندنا، هتوصلك رسالة فيها رابط استعادة كلمة المرور. افتحها (وشوف الـ Spam) واضغط على الرابط.');return}
+var p=$('pw').value;
+if(mode==='in'){
+ if(!p){toast('اكتب كلمة المرور');return}
+ var r=await sb.auth.signInWithPassword({email:e,password:p});
+ if(r.error){if(/not confirmed/i.test(r.error.message)){authUI('in','بريدك لسه ما اتأكدش. افتح الرسالة اللي وصلتك واضغط على رابط التأكيد.<br><button class="btn s g" style="margin-top:8px" onclick="resend()">أعد إرسال رسالة التأكيد</button>');return}toast(msg(r.error));return}
+ return boot()}
+var n=$('nm').value.trim();
+if(!n){toast('اكتب اسمك');return}
+if(!pwOK(p)){toast('كلمة المرور: 8 أحرف على الأقل وفيها حروف وأرقام');return}
+if(p!==$('pw2').value){toast('كلمتا المرور مش متطابقتين');return}
+var g=await sb.auth.signUp({email:e,password:p,options:{emailRedirectTo:HOME,data:{full_name:n,role:$('ro').value}}});
+if(!ok(g))return;
+var u=g.data.user;
+if(u&&u.identities&&!u.identities.length){authUI('in','البريد ده مسجّل قبل كده. سجّل دخول، أو اضغط "نسيت كلمة المرور؟".');return}
+if(!g.data.session){confirmUI();return}
+return boot()}
+
+async function resend(){
+if(!PENDING){toast('اكتب بريدك الأول');return}
+var r=await sb.auth.resend({type:'signup',email:PENDING,options:{emailRedirectTo:HOME}});
+if(ok(r))toast('بعتنا رسالة تأكيد جديدة. شوف الـ Inbox والـ Spam')}
+
+function confirmUI(){
+$('app').innerHTML=LOGO+'<h1>افتح بريدك</h1><div class="note">بعتنا رسالة تأكيد على <b dir="ltr">'+esc(PENDING)+'</b>. اضغط على الرابط اللي فيها وهتدخل حسابك تلقائيًا.</div><p class="m">لو ما لقيتهاش: شوف مجلد الـ Spam أو الرسائل غير المهمة، واستنى دقيقة.</p><div class="f"><button class="btn" id="rs2">أعد الإرسال</button><button class="btn g" id="bk2">البريد غلط؟ رجوع</button></div><p><button class="lnk" id="li">أكدت بريدي، سجّل دخول</button></p>';
+var t=0,iv;
+function cool(){t=60;$('rs2').disabled=true;clearInterval(iv);iv=setInterval(function(){t--;var b=$('rs2');if(!b){clearInterval(iv);return}b.textContent=t>0?'أعد الإرسال ('+t+')':'أعد الإرسال';if(t<=0){clearInterval(iv);b.disabled=false}},1000)}
+cool();
+$('rs2').onclick=function(){resend();cool()};
+$('bk2').onclick=function(){clearInterval(iv);authUI('up')};
+$('li').onclick=function(){clearInterval(iv);authUI('in')}}
+
+function recoveryUI(){
+$('app').innerHTML=LOGO+'<h1>كلمة مرور جديدة</h1><input id="np" type="password" placeholder="كلمة المرور الجديدة" autocomplete="new-password"><div id="ph" class="m" style="min-height:24px"></div><input id="np2" type="password" placeholder="أعد كتابتها" autocomplete="new-password">'+SHOWPW+'<div class="f"><button class="btn" id="sv">حفظ وتسجيل الدخول</button></div>';
+bindShow();$('np').oninput=function(){$('ph').innerHTML=hint(this.value)};
+$('sv').onclick=function(){once(async function(){
+ var p=$('np').value;if(!pwOK(p)){toast('8 أحرف على الأقل وفيها حروف وأرقام');return}
+ if(p!==$('np2').value){toast('كلمتا المرور مش متطابقتين');return}
+ var r=await sb.auth.updateUser({password:p});if(!ok(r))return;
+ RECOVERY=false;history.replaceState(null,'',HOME);toast('تم تغيير كلمة المرور');await boot()})}}
+
+function shell(){
+var t=(TABS[P.role]||[]).concat([['nt','الإشعارات'],['acct','حسابي']]);
+$('app').innerHTML='<div class="top"><div class="logo">Smart<span>Hire</span></div><button class="btn s g" id="lo">خروج</button></div>'+
+'<div class="m" id="who" style="padding-top:8px">'+esc(P.full_name)+' - '+(ROLE[P.role]||'أدمن')+'</div><nav>'+t.map(function(x){return '<button data-t="'+x[0]+'">'+x[1]+'</button>'}).join('')+'</nav><div id="main"></div>';
+$('lo').onclick=async function(){await sb.auth.signOut();P=null;PENDING='';authUI()};
+document.querySelector('nav').onclick=function(e){var k=e.target.getAttribute('data-t');if(k)go(k)};
+go(t[0][0]);badge()}
+async function go(k){document.querySelectorAll('nav button').forEach(function(b){var on=b.getAttribute('data-t')===k;b.className=on?'on':'';if(on)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});main(em('جارٍ التحميل...'));try{await VIEWS[k]();if(k!=='nt')badge()}catch(e){main('<div class="em bad">'+esc(msg(e))+' <button class="btn s g" onclick="go(\''+k+'\')">إعادة المحاولة</button></div>')}}
+
+/* ---------- حسابي ---------- */
+async function reauth(p){
+var u=(await sb.auth.getUser()).data.user||{};
+if(!p){toast('اكتب كلمة المرور الحالية');return false}
+var r=await sb.auth.signInWithPassword({email:u.email,password:p});
+if(r.error){toast('كلمة المرور الحالية غير صحيحة');return false}return true}
+VIEWS.acct=async function(){
+var u=(await sb.auth.getUser()).data.user||{};
+main('<h2>بيانات الحساب</h2><div class="m">البريد: <b dir="ltr">'+esc(u.email)+'</b>'+(u.new_email?'<br>بانتظار تأكيد بريد جديد: <b dir="ltr">'+esc(u.new_email)+'</b>':'')+'</div>'+
+'<h2>الاسم</h2><input id="an" value="'+esc(P.full_name)+'"><div class="f"><button class="btn s" id="sn">حفظ الاسم</button></div>'+
+'<h2>تغيير البريد الإلكتروني</h2><input id="ae" type="email" placeholder="البريد الجديد" autocapitalize="off"><input id="ac" type="password" placeholder="كلمة المرور الحالية" autocomplete="current-password"><div class="f"><button class="btn s" id="se">غيّر البريد</button></div><p class="m">هتوصلك رسالة تأكيد (ممكن على البريد القديم والجديد). التغيير بيتم بعد الضغط على الرابط.</p>'+
+'<h2>تغيير كلمة المرور</h2><input id="cp" type="password" placeholder="كلمة المرور الحالية" autocomplete="current-password"><input id="np" type="password" placeholder="كلمة المرور الجديدة" autocomplete="new-password"><div id="ph" class="m" style="min-height:24px"></div><input id="np2" type="password" placeholder="أعد كتابتها" autocomplete="new-password">'+SHOWPW+'<div class="f"><button class="btn s" id="sp2">غيّر كلمة المرور</button></div>'+
+'<h2>الجلسات</h2><div class="f"><button class="btn s g" id="so">تسجيل الخروج من كل الأجهزة</button></div>');
+bindShow();$('np').oninput=function(){$('ph').innerHTML=hint(this.value)};
+$('sn').onclick=function(){once(async function(){var n=$('an').value.trim();if(!n){toast('اكتب اسمك');return}
+ if(ok(await sb.from('profiles').update({full_name:n}).eq('id',P.id))){P.full_name=n;$('who').textContent=n+' - '+(ROLE[P.role]||'أدمن');toast('اتحفظ الاسم')}})};
+$('se').onclick=function(){once(async function(){var e=$('ae').value.trim().toLowerCase();
+ if(!EMAIL_RE.test(e)){toast('اكتب بريد إلكتروني صحيح');return}
+ if(!await reauth($('ac').value))return;
+ var r=await sb.auth.updateUser({email:e},{emailRedirectTo:HOME});
+ if(ok(r)){toast('بعتنا رسالة تأكيد. اضغط على الرابط لإتمام التغيير');VIEWS.acct()}})};
+$('sp2').onclick=function(){once(async function(){var p=$('np').value;
+ if(!pwOK(p)){toast('8 أحرف على الأقل وفيها حروف وأرقام');return}
+ if(p!==$('np2').value){toast('كلمتا المرور مش متطابقتين');return}
+ if(!await reauth($('cp').value))return;
+ var r=await sb.auth.updateUser({password:p});
+ if(ok(r)){toast('تم تغيير كلمة المرور');VIEWS.acct()}})};
+$('so').onclick=function(){once(async function(){await sb.auth.signOut({scope:'global'});P=null;authUI()})}};
+
+
+/* ---------- باحث عن عمل ---------- */
+var JQ='',JC='',JN=10;
+VIEWS.jobs=async function(){
+var r=await Promise.all([sb.rpc('my_job_matches',{p_q:JQ,p_city:JC,p_limit:JN,p_offset:0}),sb.from('seeker_skills').select('skill_id',{count:'exact',head:true}).eq('user_id',P.id)]);
+if(!ok(r[0]))return;
+var L=r[0].data||[],total=L.length?+L[0].total:0,none=!(r[1].count>0);
+var tg=function(a,c){return a.map(function(s){return '<span class="tag '+c+'">'+esc(s)+'</span>'}).join('')};
+main((none?'<div class="em">أضف مهاراتك من تبويب "مهاراتي" عشان تظهر نسب التوافق.</div>':'')+
+'<div class="f"><input id="jq" placeholder="ابحث باسم الوظيفة أو الشركة" value="'+esc(JQ)+'"><input id="jc" placeholder="المدينة" value="'+esc(JC)+'"><button class="btn s" id="jgo">بحث</button></div>'+
+(L.length?L.map(function(o){return '<div class="it"><div class="nm">'+esc(o.title)+' <span class="'+(o.score>=60?'ok':'bad')+'">'+o.score+'%</span></div><div class="m">'+esc(o.company_name)+(o.city?'، '+esc(o.city):'')+'</div><div>'+esc(o.description)+'</div><div>'+tg(o.matched||[],'y')+tg(o.missing||[],'n')+'</div><div class="f"><button class="btn s'+(o.applied?' g':'')+'" '+(o.applied?'disabled':'onclick="applyJob(\''+o.id+'\')"')+'>'+(o.applied?'تم التقديم':'قدّم')+'</button></div></div>'}).join('')+(total>L.length?'<div class="f"><button class="btn g" id="jmore">عرض المزيد ('+(total-L.length)+')</button></div>':''):em('مفيش وظائف مطابقة.')));
+$('jgo').onclick=function(){JQ=$('jq').value.trim();JC=$('jc').value.trim();JN=10;VIEWS.jobs()};
+$('jq').onkeydown=function(e){if(e.key==='Enter')$('jgo').click()};
+if($('jmore'))$('jmore').onclick=function(){JN+=10;VIEWS.jobs()}};
+async function applyJob(id){if(ok(await sb.from('applications').insert({job_id:id,seeker_id:P.id}))){toast('اتبعت طلبك');VIEWS.jobs()}}
+VIEWS.sk=async function(){
+var r=await sb.from('seeker_skills').select('skill_id').eq('user_id',P.id),mine=(r.data||[]).map(function(x){return x.skill_id});
+main('<h2>اختر مهاراتك</h2><div>'+SKL.map(function(s){return '<label class="tag"><input type="checkbox" value="'+s.id+'"'+(mine.indexOf(s.id)>-1?' checked':'')+'>'+esc(s.name_ar)+'</label>'}).join('')+'</div><div class="f"><button class="btn" id="sv">حفظ المهارات</button></div>');
+$('sv').onclick=async function(){var ids=[].slice.call(document.querySelectorAll('#main input:checked')).map(function(i){return +i.value});
+ if(!ok(await sb.from('seeker_skills').delete().eq('user_id',P.id)))return;
+ if(ids.length&&!ok(await sb.from('seeker_skills').insert(ids.map(function(i){return {user_id:P.id,skill_id:i}}))))return;toast('اتحفظت مهاراتك')}};
+VIEWS.ap=async function(){
+var r=await sb.from('applications').select('id,status,match_score,jobs(title)').eq('seeker_id',P.id).order('created_at',{ascending:false});if(!ok(r))return;
+var ST={submitted:'قيد المراجعة',shortlisted:'في القائمة المختصرة',rejected:'مرفوض',hired:'تم قبولك'};
+main((r.data||[]).length?r.data.map(function(a){return '<div class="it"><div class="nm">'+esc((a.jobs||{}).title)+'</div><div class="m">'+ST[a.status]+' - توافق '+(a.match_score||0)+'%</div><div class="f"><button class="btn s g" onclick="delAp(\''+a.id+'\')">سحب الطلب</button></div></div>'}).join(''):em('لسه ما قدمتش على وظايف.'))};
+async function delAp(id){if(ok(await sb.from('applications').delete().eq('id',id)))VIEWS.ap()}
+
+/* ---------- صاحب عمل ---------- */
+VIEWS.mj=async function(){
+var r=await sb.from('jobs').select('id,title,status,companies!inner(owner_id),applications(id,status,match_score,profiles(full_name))').eq('companies.owner_id',P.id).order('created_at',{ascending:false});if(!ok(r))return;
+var ST={submitted:'جديد',shortlisted:'مختصر',rejected:'مرفوض',hired:'مقبول'};
+main((r.data||[]).length?r.data.map(function(j){return '<div class="it"><div class="nm">'+esc(j.title)+' <span class="m">('+(j.status==='open'?'مفتوحة':'مغلقة')+')</span></div>'+((j.applications||[]).sort(function(a,b){return (b.match_score||0)-(a.match_score||0)}).map(function(a){return '<div class="f"><span>'+esc((a.profiles||{}).full_name)+' - '+(a.match_score||0)+'% - '+ST[a.status]+'</span><button class="btn s g" onclick="setAp(\''+a.id+'\',\'shortlisted\')">اختصار</button><button class="btn s g" onclick="setAp(\''+a.id+'\',\'hired\')">قبول</button><button class="btn s g" onclick="setAp(\''+a.id+'\',\'rejected\')">رفض</button></div>'}).join('')||'<div class="m">لا يوجد متقدمون بعد.</div>')+'<div class="f"><button class="btn s g" onclick="togJob(\''+j.id+'\',\''+(j.status==='open'?'closed':'open')+'\')">'+(j.status==='open'?'إغلاق الوظيفة':'إعادة فتح')+'</button></div></div>'}).join(''):em('لسه ما نشرتش وظائف.'))};
+async function setAp(id,s){if(ok(await sb.from('applications').update({status:s}).eq('id',id)))VIEWS.mj()}
+async function togJob(id,s){if(ok(await sb.from('jobs').update({status:s}).eq('id',id)))VIEWS.mj()}
+VIEWS.nj=async function(){
+var c=await sb.from('companies').select('id,name').eq('owner_id',P.id).limit(1),co=(c.data||[])[0];
+main('<h2>وظيفة جديدة</h2>'+(co?'':'<input id="cn" placeholder="اسم شركتك">')+'<input id="jt" placeholder="المسمى الوظيفي"><textarea id="jd" placeholder="وصف الوظيفة"></textarea><input id="jc" placeholder="المدينة"><div>'+SKL.map(function(s){return '<label class="tag"><input type="checkbox" value="'+s.id+'">'+esc(s.name_ar)+'</label>'}).join('')+'</div><div class="f"><button class="btn" id="pj">انشر الوظيفة</button></div>');
+$('pj').onclick=async function(){
+ var t=$('jt').value.trim();if(!t){toast('اكتب المسمى الوظيفي');return}
+ var id=co&&co.id;
+ if(!id){var n=$('cn').value.trim();if(!n){toast('اكتب اسم الشركة');return}var cr=await sb.from('companies').insert({owner_id:P.id,name:n}).select('id').single();if(!ok(cr))return;id=cr.data.id}
+ var j=await sb.from('jobs').insert({company_id:id,title:t,description:$('jd').value.trim(),city:$('jc').value.trim()}).select('id').single();if(!ok(j))return;
+ var ids=[].slice.call(document.querySelectorAll('#main input:checked')).map(function(i){return +i.value});
+ if(ids.length&&!ok(await sb.from('job_skills').insert(ids.map(function(s){return {job_id:j.data.id,skill_id:s}}))))return;
+ toast('اتنشرت الوظيفة');go('mj')}};
+
+/* ---------- فني ---------- */
+VIEWS.tp=async function(){
+var r=await sb.from('tradesperson_profiles').select('*').eq('user_id',P.id).maybeSingle(),t=r.data||{};
+main('<h2>ملفك الفني</h2>'+(t.user_id?'<div class="m">'+(t.verified?'<span class="ok">موثّق</span>':'بانتظار توثيق الإدارة')+'</div>':'')+'<select id="ct">'+CAT.map(function(c){return '<option value="'+c.id+'"'+(t.category_id===c.id?' selected':'')+'>'+esc(c.name)+'</option>'}).join('')+'</select><input id="ci" placeholder="المدينة" value="'+esc(t.city)+'"><input id="pr" type="number" placeholder="سعر الزيارة بالجنيه" value="'+esc(t.price_per_visit)+'"><input id="yr" type="number" placeholder="سنوات الخبرة" value="'+esc(t.years)+'"><textarea id="bi" placeholder="نبذة عنك">'+esc(t.bio)+'</textarea><div class="f"><button class="btn" id="sv">حفظ</button></div>');
+$('sv').onclick=async function(){var p=+$('pr').value,c=$('ci').value.trim();if(!c||!(p>0)){toast('المدينة والسعر مطلوبين');return}
+ var d={user_id:P.id,category_id:+$('ct').value,city:c,price_per_visit:p,years:+$('yr').value||0,bio:$('bi').value.trim()};
+ var q=t.user_id?await sb.from('tradesperson_profiles').update(d).eq('user_id',P.id):await sb.from('tradesperson_profiles').insert(d);if(ok(q))toast('اتحفظ ملفك')}};
+VIEWS.tb=async function(){
+var r=await sb.from('bookings').select('id,visit_date,slot,status,profiles(full_name)').eq('tradesperson_id',P.id).order('visit_date');if(!ok(r))return;
+var ST={pending:'جديد',confirmed:'مؤكد',done:'تمت',cancelled:'ملغي'};
+main((r.data||[]).length?r.data.map(function(b){return '<div class="it"><div class="nm">'+esc((b.profiles||{}).full_name)+'</div><div class="m">'+esc(b.visit_date)+' - '+SLOT[b.slot]+' - '+ST[b.status]+'</div><div class="f">'+(b.status==='pending'?'<button class="btn s" onclick="setBk(\''+b.id+'\',\'confirmed\')">تأكيد</button>':'')+(b.status==='confirmed'?'<button class="btn s" onclick="setBk(\''+b.id+'\',\'done\')">تمت الزيارة</button>':'')+(b.status==='pending'||b.status==='confirmed'?'<button class="btn s g" onclick="setBk(\''+b.id+'\',\'cancelled\')">إلغاء</button>':'')+'</div></div>'}).join(''):em('مفيش حجوزات لسه.'))};
+async function setBk(id,s){if(ok(await sb.from('bookings').update({status:s}).eq('id',id)))go(P.role==='customer'?'cb':'tb')}
+
+/* ---------- عميل ---------- */
+var TC='',TY='',TS='rating',TN=10;
+VIEWS.tl=async function(){
+var r=await Promise.all([sb.rpc('search_tradespeople',{p_category:TC?+TC:null,p_city:TY,p_sort:TS,p_limit:TN,p_offset:0}),sb.from('tradesperson_profiles').select('city')]);if(!ok(r[0]))return;
+var L=r[0].data||[],total=L.length?+L[0].total:0,cities=[];(r[1].data||[]).forEach(function(t){if(cities.indexOf(t.city)<0)cities.push(t.city)});cities.sort();
+var td=today();
+main('<h2>فنيين متاحين</h2><div class="f"><select id="fc" aria-label="التخصص"><option value="">كل التخصصات</option>'+CAT.map(function(c){return '<option value="'+c.id+'"'+(String(c.id)===TC?' selected':'')+'>'+esc(c.name)+'</option>'}).join('')+'</select><select id="fy" aria-label="المدينة"><option value="">كل المدن</option>'+cities.map(function(c){return '<option'+(TY===c?' selected':'')+'>'+esc(c)+'</option>'}).join('')+'</select><select id="fs" aria-label="الترتيب"><option value="rating"'+(TS==='rating'?' selected':'')+'>الأعلى تقييمًا</option><option value="price"'+(TS==='price'?' selected':'')+'>الأقل سعرًا</option></select></div>'+
+(L.length?L.map(function(t){return '<div class="it"><div class="nm">'+esc(t.full_name)+' <span class="tag">'+esc(t.category)+'</span>'+(t.verified?' <span class="ok">موثّق</span>':'')+'</div><div class="m">'+esc(t.city)+'، خبرة '+t.years+' سنوات، '+(t.review_count?'التقييم '+Number(t.avg_rating).toFixed(1)+' ('+t.review_count+')':'بدون تقييمات')+' - '+t.price_per_visit+' جنيه للزيارة</div><div>'+esc(t.bio)+'</div><div class="f"><input type="date" min="'+td+'" id="d'+t.user_id+'"><select id="s'+t.user_id+'"><option value="morning">صباحًا</option><option value="noon">ظهرًا</option><option value="evening">مساءً</option></select><button class="btn s" onclick="book(\''+t.user_id+'\')">احجز</button></div></div>'}).join('')+(total>L.length?'<div class="f"><button class="btn g" id="tmore">عرض المزيد ('+(total-L.length)+')</button></div>':''):em('مفيش فنيين مطابقين.')));
+['fc','fy','fs'].forEach(function(i){$(i).onchange=function(){TC=$('fc').value;TY=$('fy').value;TS=$('fs').value;TN=10;VIEWS.tl()}});
+if($('tmore'))$('tmore').onclick=function(){TN+=10;VIEWS.tl()}};
+async function book(id){var d=$('d'+id).value;if(!d){toast('اختر يوم الزيارة');return}
+var r=await sb.from('bookings').insert({customer_id:P.id,tradesperson_id:id,visit_date:d,slot:$('s'+id).value});
+if(r.error&&r.error.code==='23505'){toast('الموعد ده محجوز، اختر فترة تانية');return}if(ok(r)){toast('اتحجز الموعد');go('cb')}}
+VIEWS.cb=async function(){
+var r=await sb.from('bookings').select('id,visit_date,slot,status,tradesperson_profiles(profiles(full_name),service_categories(name))').eq('customer_id',P.id).order('visit_date',{ascending:false});if(!ok(r))return;
+var ids=(r.data||[]).map(function(b){return b.id}),rv={};
+if(ids.length)((await sb.from('reviews').select('booking_id,rating').in('booking_id',ids)).data||[]).forEach(function(x){rv[x.booking_id]=x.rating});
+var ST={pending:'بانتظار التأكيد',confirmed:'مؤكد',done:'تمت',cancelled:'ملغي'};
+main((r.data||[]).length?r.data.map(function(b){var t=b.tradesperson_profiles||{};return '<div class="it"><div class="nm">'+esc((t.profiles||{}).full_name)+' - '+esc((t.service_categories||{}).name)+'</div><div class="m">'+esc(b.visit_date)+' - '+SLOT[b.slot]+' - '+ST[b.status]+'</div><div class="f">'+(b.status==='pending'||b.status==='confirmed'?'<button class="btn s g" onclick="setBk(\''+b.id+'\',\'cancelled\')">إلغاء</button>':'')+(b.status==='done'?(rv[b.id]?'<span class="ok">تقييمك: '+rv[b.id]+' من 5</span>':'<span class="m">قيّم الزيارة:</span>'+[1,2,3,4,5].map(function(n){return '<button class="btn s g" onclick="rate(\''+b.id+'\','+n+')">'+n+'</button>'}).join('')):'')+'</div></div>'}).join(''):em('ما فيش حجوزات.'))};
+async function rate(id,n){if(ok(await sb.from('reviews').insert({booking_id:id,rating:n}))){toast('شكرًا لتقييمك');VIEWS.cb()}}
+
+['applyJob','delAp','setAp','togJob','setBk','book','rate','resend','verifyTp'].forEach(function(n){var f=window[n];window[n]=function(){var a=arguments;return once(function(){return f.apply(null,a)})}});
+/* ---------- الإشعارات ---------- */
+async function badge(){var r=await sb.from('notifications').select('id',{count:'exact',head:true}).eq('read',false),b=document.querySelector('nav button[data-t="nt"]');if(b&&!r.error)b.textContent='الإشعارات'+(r.count?' ('+r.count+')':'')}
+VIEWS.nt=async function(){
+var r=await sb.from('notifications').select('id,title,body,link,read,created_at').order('created_at',{ascending:false}).limit(50);if(!ok(r))return;
+var L=r.data||[];
+main(L.length?L.map(function(n){var ok2=n.link&&document.querySelector('nav button[data-t="'+n.link+'"]');return '<div class="it"><div class="nm">'+(n.read?'':'<span class="tag y">جديد</span> ')+esc(n.title)+'</div><div>'+esc(n.body)+'</div><div class="m">'+esc(new Date(n.created_at).toLocaleString('ar-EG'))+'</div>'+(ok2?'<div class="f"><button class="btn s g" onclick="go(\''+esc(n.link)+'\')">فتح</button></div>':'')+'</div>'}).join(''):em('مفيش إشعارات لسه.'));
+if(L.some(function(n){return !n.read})){await sb.from('notifications').update({read:true}).eq('read',false);badge()}};
+
+/* ---------- الإدارة ---------- */
+VIEWS.ad=async function(){
+var r=await Promise.all([sb.rpc('admin_stats'),sb.from('tradesperson_profiles').select('user_id,city,profiles(full_name),service_categories(name)').eq('verified',false).order('created_at')]);if(!ok(r[0]))return;
+var s=r[0].data||{},kv=function(o){return Object.keys(o||{}).map(function(k){return esc(ROLE[k]||k)+': <b>'+esc(o[k])+'</b>'}).join(' | ')||'-'};
+main('<h2>إحصائيات</h2><div class="it"><div>المستخدمون: '+kv(s.users)+'</div><div>وظائف مفتوحة: <b>'+esc(s.open_jobs)+'</b></div><div>الطلبات: '+kv(s.applications)+'</div><div>الحجوزات: '+kv(s.bookings)+'</div><div>متوسط التقييم: <b>'+(s.avg_rating==null?'-':esc(s.avg_rating))+'</b></div></div><h2>فنيين بانتظار التوثيق ('+esc(s.unverified_tradespeople)+')</h2>'+((r[1].data||[]).length?r[1].data.map(function(t){return '<div class="it"><div class="nm">'+esc((t.profiles||{}).full_name)+' <span class="tag">'+esc((t.service_categories||{}).name)+'</span></div><div class="m">'+esc(t.city)+'</div><div class="f"><button class="btn s" onclick="verifyTp(\''+t.user_id+'\')">وثّق</button></div></div>'}).join(''):em('مفيش فنيين بانتظار التوثيق.')))};
+async function verifyTp(id){if(ok(await sb.rpc('admin_verify_tradesperson',{p_user:id,p_verified:true}))){toast('تم التوثيق');VIEWS.ad()}}
+</script>
+</body>
+</html>
